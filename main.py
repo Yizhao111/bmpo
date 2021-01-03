@@ -2,27 +2,27 @@ import argparse
 import importlib
 import runner
 parser = argparse.ArgumentParser()
-parser.add_argument('--config', type=str)
+parser.add_argument('--config', type=str, default='config.halfcheetah_mixed')
 # parser.add_argument('--seed', type=int, default=0)
 args = parser.parse_args()
 
 module = importlib.import_module(args.config)
-params = getattr(module, 'params')
+params = getattr(module, 'params')  # get config dict params from --config=config.xx.py
 universe, domain, task = params['universe'], params['domain'], params['task']
 epoch_length = params['kwargs']['epoch_length']
 
-NUM_EPOCHS_PER_DOMAIN = {
-    'Pendulum':int(19),
-    'Hopper': int(95),
-    'HopperNT': int(95),
-    'Walker2d': int(195),
-    'Walker2dNT': int(195),
-    'Ant': int(295),
-}
+# NUM_EPOCHS_PER_DOMAIN = {
+#     'Pendulum':int(19),
+#     'Hopper': int(95),
+#     'HopperNT': int(95),
+#     'Walker2d': int(195),
+#     'Walker2dNT': int(195),
+#     'Ant': int(295),
+# }
 
 
-params['kwargs']['n_epochs'] = NUM_EPOCHS_PER_DOMAIN[domain]
-#params['kwargs']['n_initial_exploration_steps'] = 5000
+# params['kwargs']['n_epochs'] = NUM_EPOCHS_PER_DOMAIN[domain]  # TODO: mopo seems doesn't use the "n_epochs", check it
+
 params['kwargs']['reparameterize'] = True
 params['kwargs']['lr'] = 3e-4
 params['kwargs']['target_update_interval'] = 1
@@ -76,10 +76,12 @@ variant_spec = {
         'run_params': {
             # 'seed': args.seed,
             'checkpoint_at_end': True,
-            'checkpoint_frequency': NUM_EPOCHS_PER_DOMAIN[domain] // 10,
+            # 'checkpoint_frequency': NUM_EPOCHS_PER_DOMAIN[domain] // 10,  # TODO: in mopo , this is 20, check it latter
+            'checkpoint_frequency': 20,
             'checkpoint_replay_pool': False,
         },
     }
 
+print(variant_spec)
 exp_runner = runner.ExperimentRunner(variant_spec)
-diagnostics = exp_runner.train()
+diagnostics = exp_runner.train()  # train agent and return diagnostics

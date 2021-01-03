@@ -19,12 +19,20 @@ class ExperimentRunner:
         # self.local_dir = os.path.join(variant['algorithm_params']['log_dir'], variant['algorithm_params']['domain'])
 
         self.variant = variant
+
+        # set up wandb for logging
+        import wandb
+        wandb.init(project = 'bmopo')
+        wandb.config.update(variant)
+
         session = tf.Session()
         tf.keras.backend.set_session(session)
         self._session = tf.keras.backend.get_session()
         self.train_generator = None
 
-    def build(self):
+        self._built = False
+
+    def _build(self):
         environment_params = self.variant['environment_params']
         training_environment = self.training_environment = (get_environment_from_params(environment_params['training']))
         evaluation_environment = self.evaluation_environment = (
@@ -33,17 +41,17 @@ class ExperimentRunner:
             else training_environment)
 
         replay_pool = self.replay_pool = (get_replay_pool_from_variant(self.variant, training_environment))
-        sampler = self.sampler = get_sampler_from_variant(self.variant)
+        sampler = self.sampler = get_sampler_from_variant(self.variant)  # TODO: what does the sampler do? and the bmpo exist there, and should be corrected.
         Qs = self.Qs = get_Q_function_from_variant(self.variant, training_environment)
         policy = self.policy = get_policy_from_variant(self.variant, training_environment, Qs)
         initial_exploration_policy = self.initial_exploration_policy = (get_policy('UniformPolicy', training_environment))
 
         #### get termination function
         domain = environment_params['training']['domain']
-        static_fns = static[domain.lower()]
+        static_fns = static[domain.lower()]  # TODO: This seems need to be corrected.
         ####
 
-        log_path = './log/%s' % (self.variant['algorithm_params']['domain'])
+        log_path = './log/%s' % (self.variant['algorithm_params']['exp_name'])
         if(not os.path.exists(log_path)):
             os.makedirs(log_path)
 
@@ -61,8 +69,12 @@ class ExperimentRunner:
             log_file='./log/%s/%d.log' % (self.variant['algorithm_params']['domain'], time.time()))
 
         initialize_tf_variables(self._session, only_uninitialized=True)
+        self._built = True
 
     def train(self):
-        self.build()
+        if not self._built:
+            self._build()
 
-        self.algorithm.train()
+        diagnostics = self.algorithm.train()
+
+        return diagnostics

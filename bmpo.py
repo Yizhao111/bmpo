@@ -22,7 +22,6 @@ def td_target(reward, discount, next_value):
 
 
 class BMPO(RLAlgorithm):
-
     def __init__(
             self,
             training_environment,

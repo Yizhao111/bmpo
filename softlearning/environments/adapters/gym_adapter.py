@@ -3,6 +3,7 @@
 import numpy as np
 import gym
 from gym import spaces, wrappers
+import d4rl  # add d4rl here for supporting offling tasks
 
 from .softlearning_env import SoftlearningEnv
 from softlearning.environments.gym import register_environments
