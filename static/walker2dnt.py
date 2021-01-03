@@ -17,3 +17,4 @@ class StaticFns:
         done = np.zeros_like(done)
         done = done[:, None]
         return done
+

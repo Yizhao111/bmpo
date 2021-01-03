@@ -6,12 +6,11 @@ class StaticFns:
     def termination_fn(obs, act, next_obs):
         assert len(obs.shape) == len(next_obs.shape) == len(act.shape) == 2
 
-        height = next_obs[:, 0]
-        angle = next_obs[:, 1]
-        not_done =  (height > 0.8) \
-                    * (height < 2.0) \
-                    * (angle > -1.0) \
-                    * (angle < 1.0)
+        x = next_obs[:, 0]
+        not_done = 	np.isfinite(next_obs).all(axis=-1) \
+        			* (x >= 0.2) \
+        			* (x <= 1.0)
+
         done = ~not_done
         done = done[:,None]
         return done
