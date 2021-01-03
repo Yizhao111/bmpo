@@ -18,7 +18,7 @@ from models.constructor import construct_forward_model, format_samples_for_forwa
 from models.fake_env import Forward_FakeEnv, Backward_FakeEnv
 
 from utils.loader import restore_pool # load d4rl dataset
-
+from utils.filesystem import mkdir
 
 def td_target(reward, discount, next_value):
     return reward + discount * next_value
@@ -239,7 +239,8 @@ class BMOPO(RLAlgorithm):
 
         self._training_before_hook()
 
-        max_epochs = 1 if self._model.model_loaded else None
+        # max_epochs = 1 if (self._forward_model.model_loaded and self._backward_model.model_loaded) else None
+        max_epochs = 2 # TODO: CHAGE IT
         # train the forward and the backward dynamic model
         f_model_train_metrics, b_model_train_metrics = self._train_model(batch_size=256,
                                                                         max_epochs=max_epochs,
@@ -256,14 +257,16 @@ class BMOPO(RLAlgorithm):
             self._epoch_before_hook()
 
             start_samples = self.sampler._total_samples
-            print('------- epoch: {} --------'.format(self._epoch))
+            print('------- epoch: {} --------'.format(self._epoch), "start_samples", start_samples)
             print('[ True Env Buffer Size ]', pool.size)
 
-            for i in count():
-                samples_now = self.sampler._total_samples
-                self._timestep = samples_now - start_samples
+            for timestep in count():
+                # samples_now = self.sampler._total_samples
+                # self._timestep = samples_now - start_samples
+                self._timestep = timestep
 
-                if samples_now >= start_samples + self._epoch_length and self.ready_to_train:
+                # if samples_now >= start_samples + self._epoch_length and self.ready_to_train:
+                if timestep >= self._epoch_length:
                     break
 
                 self._timestep_before_hook()
@@ -277,7 +280,6 @@ class BMOPO(RLAlgorithm):
                                         deterministic=self._deterministic)
                     f_model_metrics.update(f_model_rollout_metrics)
                     b_model_metrics.update(b_model_rollout_metrics)
-
                 # Train the actor and the critic (forward and backward).
                 if self.ready_to_train:
                     self._do_training_repeats(timestep=self._total_timestep)  # Here, for bmopo, need to train both forward and backward policy.
@@ -285,7 +287,7 @@ class BMOPO(RLAlgorithm):
                 self._timestep_after_hook()
 
             training_paths = self.sampler.get_last_n_paths(
-                math.ceil(self._epoch_length / self.sampler._max_path_length))
+                math.ceil(self._epoch_length / self.sampler._max_path_length))  # TODO: this seems wrong: param==1, chech the mopo code
             evaluation_paths = self._evaluation_paths(
                 policy, evaluation_environment)
 
@@ -354,6 +356,21 @@ class BMOPO(RLAlgorithm):
     def train(self, *args, **kwargs):
         return self._train(*args, **kwargs)
 
+    def _log_policy(self):
+        print('--------- log policy is passed ---------')
+        pass
+
+    def _log_model(self):
+        if self._forward_model.model_loaded and self._backward_model.model_loaded:
+            print('[ MOPO ] Loaded model, skipping save')
+        else:
+            save_path = os.path.join(self._log_dir, 'models')
+            mkdir(save_path)
+            print('[ MOPO ] Saving model to: {}'.format(save_path))
+
+            # TODO: check the save function
+            self._forward_model.save(save_path, self._total_timestep)
+            self._backward_model.save(save_path, self._total_timestep)
     def _set_rollout_length(self):
         # set the rollout_length according to self._backward_rollout_schedule and self._forward_rollout_schedule.
         # the format of the rollout_schedule is [min_epoch, max_epoch, min_length, max_length]
@@ -368,7 +385,7 @@ class BMOPO(RLAlgorithm):
             y = dx * (max_length - min_length) + min_length
 
         self._backward_rollout_length = int(y)
-        print('[Backward Model Length ] Epoch: {} (min: {}, max: {}) | Length: {} (min: {} , max: {})'.format(
+        print('[ Set Backward Model Length ] Epoch: {} (min: {}, max: {}) | Length: {} (min: {} , max: {})'.format(
             self._epoch, min_epoch, max_epoch, self._backward_rollout_length, min_length, max_length
         ))
         # set forward rollout length
@@ -381,7 +398,7 @@ class BMOPO(RLAlgorithm):
             y = dx * (max_length - min_length) + min_length
 
         self._forward_rollout_length = int(y)
-        print('[Forward Model Length ] Epoch: {} (min: {}, max: {}) | Length: {} (min: {} , max: {})'.format(
+        print('[ Set Forward Model Length ] Epoch: {} (min: {}, max: {}) | Length: {} (min: {} , max: {})'.format(
             self._epoch, min_epoch, max_epoch, self._forward_rollout_length, min_length, max_length
         ))
 
@@ -424,8 +441,8 @@ class BMOPO(RLAlgorithm):
     def _rollout_model(self, rollout_batch_size, **kwargs):  # TODO: change the fake_env to add penalty
         # Rollout model using fake_env and add samples into _model_pool
 
-        print('[ Model Rollout ] Starting | Epoch: {} | Rollout length: {} | Batch size: {} | Type: {}'.format(
-            self._epoch, self._rollout_length, rollout_batch_size, self._model_type
+        print('[ Backward Model Rollout ] Starting | Epoch: {} | Rollout length: {} | Batch size: {}'.format(
+            self._epoch, self._backward_rollout_schedule[-1], rollout_batch_size,
         ))
 
         batch = self.sampler.random_batch(rollout_batch_size)  # sample init states batch from env_pool
@@ -453,6 +470,9 @@ class BMOPO(RLAlgorithm):
             obs = before_obs[nonterm_mask]
 
         # perform forward rollout
+        print('[ Forward Model Rollout ] Starting | Epoch: {} | Rollout length: {} | Batch size: {} '.format(
+            self._epoch, self._forward_rollout_schedule[-1], rollout_batch_size,
+        ))
         obs = start_obs
         for i in range(self._forward_rollout_length):
             act = self._policy.actions_np(obs)
@@ -479,9 +499,8 @@ class BMOPO(RLAlgorithm):
             self._model_pool._max_size, f_mean_rollout_length+b_mean_rollout_length, self._n_train_repeat
         ))
 
-        rollout_stats = {'f_mean_rollout_length': f_mean_rollout_length,
-                         'b_mean_rollout_length': b_mean_rollout_length} # for logging
-        return rollout_stats
+        return {'f_mean_rollout_length': f_mean_rollout_length}, {'b_mean_rollout_length': b_mean_rollout_length} # for logging
+
 
     def _training_batch(self, batch_size=None):
         # get the training data used for policy and critic update. Called in self._do_training_repeat()
@@ -737,24 +756,28 @@ class BMOPO(RLAlgorithm):
             # Run target ops here.
             self._update_target()
 
-    def _do_training_repeats(self, timestep,backward_policy_train_repeat = 1):
+    def _do_training_repeats(self, timestep, backward_policy_train_repeat = 1):
         """Repeat training _n_train_repeat times every _train_every_n_steps,
         This method overrides the method in softlearning, since it needs to take care of the backward policy
         """
+        print('-------------- into do training repeat -----------', "train_steps this epoch", self._train_steps_this_epoch, 'max * timestep', self._max_train_repeat_per_timestep*self._timestep, self._max_train_repeat_per_timestep, self._timestep)
         if timestep % self._train_every_n_steps > 0: return
         trained_enough = (
             self._train_steps_this_epoch
             > self._max_train_repeat_per_timestep * self._timestep)
+        print(' -------------- trained_enough ----------')
         if trained_enough: return
 
         # Train forward policy and Q
+        self._n_train_repeat = 1 # TODO : REMOVE THIS
         for i in range(self._n_train_repeat):
+            print('------------ Train forward policy and Q function')
             self._do_training(
                 iteration=timestep,
                 batch=self._training_batch())
 
         # train backward policy -- via maximal likelihood. s'->a
-        for i in range(backward_policy_train_repeat):
+        for i in range(backward_policy_train_repeat):  #TODO: Change the backward_policy_train_repeat, Now forward train 1000 times while backward only train 1 time
             """ Our goal is to make the backward rollouts resemble the real trajectory sampled by the current forward policy.Thus
             when training the backward policy, we only use the recent trajectories sampled by the agent in the real environment."""
             batch = self._pool.last_n_random_batch(last_n=self._epoch_length * self._last_n_epoch, batch_size=256)  # TODO: This is incorrect, it uses the recent traj sampled from the real env.

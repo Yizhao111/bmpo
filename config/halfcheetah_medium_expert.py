@@ -33,17 +33,16 @@ params = {
         # For bmpo TODO
         'forward_rollout_schedule': [20, 100, 5, 5],  # [20, 100, rollout_length, rollout_length]
         'backward_rollout_schedule':[20, 100, 5, 5],  # [20, 100, rollout_length, rollout_length]
-        'beta_schedule':[0,100,0.003,0.003],
         'last_n_epoch':10,
-        'planning_horizon':0,
         'backward_policy_var': 0.01,
         'n_initial_exploration_steps':5000,
 
         # For mopo
         'pool_load_path': 'd4rl/halfcheetah-medium-expert-v0',
         'pool_load_max_size': 2 * 10 ** 6,
-        'rollout_length': 5,
+        # 'rollout_length': 5,
         'penalty_coeff': 5.0,
+
         'separate_mean_var': True,
         'penalty_learned_var': True,
     }

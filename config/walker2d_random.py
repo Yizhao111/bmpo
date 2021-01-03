@@ -33,16 +33,14 @@ params = {
         # For bmpo TODO
         'forward_rollout_schedule': [20, 100, 1, 1],
         'backward_rollout_schedule':[20, 100, 1, 1],
-        'beta_schedule':[0,100,0.003,0.003],
         'last_n_epoch':10,
-        'planning_horizon':0,
         'backward_policy_var': 0.01,
         'n_initial_exploration_steps':5000,
 
         # For mopo
         'pool_load_path': 'd4rl/walker2d-random-v0',
         'pool_load_max_size': 10 ** 6,
-        'rollout_length': 1,
+        # 'rollout_length': 1,
         'penalty_coeff': 1.0,
 
         'separate_mean_var': True,
