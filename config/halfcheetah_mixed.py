@@ -45,7 +45,7 @@ params = {
         'penalty_coeff': 1.0,
         
         'separate_mean_var': True,
-        'penalty_learned_var': True,  # TODO: what does this for?
+        'penalty_learned_var': True,  # MoREL if False, else MOPO
 
         # From main
         'reparameterize': True,

@@ -4,10 +4,13 @@ import tensorflow as tf
 
 class Forward_FakeEnv:
 
-    def __init__(self, model, config):
+    def __init__(self, model, config,
+                 penalty_coeff=0.,
+                 penalty_learned_var=False,):
         self.model = model
         self.config = config
-
+        self.penalty_coeff=0
+        self.penalty_learned_var=False
     '''
         x : [ batch_size, obs_dim + 1 ]
         means : [ num_models, batch_size, obs_dim + 1 ]
@@ -70,15 +73,42 @@ class Forward_FakeEnv:
         return_means = np.concatenate((model_means[:, :1], terminals, model_means[:, 1:]), axis=-1)
         return_stds = np.concatenate((model_stds[:, :1], np.zeros((batch_size, 1)), model_stds[:, 1:]), axis=-1)
 
+        # Add penalty to the rewards for the p(s'|s,a) that has risk
+        if self.penalty_coeff != 0:
+            if not self.penalty_learned_var:
+                ensemble_means_obs = ensemble_model_means[:,:,1:]
+                mean_obs_means = np.mean(ensemble_means_obs, axis=0)     # average predictions over models
+                diffs = ensemble_means_obs - mean_obs_means
+                normalize_diffs = False
+                if normalize_diffs:
+                    obs_dim = next_obs.shape[1]
+                    obs_sigma = self.model.scaler.cached_sigma[0,:obs_dim]
+                    diffs = diffs / obs_sigma
+                dists = np.linalg.norm(diffs, axis=2)   # distance in obs space
+                penalty = np.max(dists, axis=0)         # max distances over models
+            else:
+                penalty = np.amax(np.linalg.norm(ensemble_model_stds, axis=2), axis=0)
+
+            penalty = np.expand_dims(penalty, 1)
+            assert penalty.shape == rewards.shape, "rewards have shape {}, but penalty has shape {}".format(rewards.shape, penalty.shape)
+            unpenalized_rewards = rewards
+            penalized_rewards = rewards - self.penalty_coeff * penalty
+        else:
+            penalty = None
+            unpenalized_rewards = rewards
+            penalized_rewards = rewards
+
         if return_single:
             next_obs = next_obs[0]
             return_means = return_means[0]
             return_stds = return_stds[0]
-            rewards = rewards[0]
+            unpenalized_rewards = unpenalized_rewards[0]
+            penalized_rewards = penalized_rewards[0]
             terminals = terminals[0]
 
-        info = {'mean': return_means, 'std': return_stds, 'log_prob': log_prob, 'dev': dev}
-        return next_obs, rewards, terminals, info
+        info = {'mean': return_means, 'std': return_stds, 'log_prob': log_prob, 'dev': dev,
+                'unpenalized_rewards': unpenalized_rewards, 'penalty': penalty, 'penalized_rewards': penalized_rewards}
+        return next_obs, penalized_rewards, terminals, info
 
     ## for debugging computation graph
     def step_ph(self, obs_ph, act_ph, deterministic=False):
@@ -114,9 +144,13 @@ class Forward_FakeEnv:
 
 class Backward_FakeEnv:
 
-    def __init__(self, model, config):
+    def __init__(self, model, config,
+                 penalty_coeff=0,
+                 penalty_learned_var=False):
         self.model = model
         self.config = config
+        self.penalty_coeff = penalty_coeff
+        self.penalty_learned_var = penalty_learned_var
 
     '''
         x : [ batch_size, obs_dim + 1 ]
@@ -180,15 +214,44 @@ class Backward_FakeEnv:
         return_means = np.concatenate((model_means[:, :1], terminals, model_means[:, 1:]), axis=-1)
         return_stds = np.concatenate((model_stds[:, :1], np.zeros((batch_size, 1)), model_stds[:, 1:]), axis=-1)
 
+        # Add penalty to the rewards for the p(s_prev|s,a) that has risk
+        if self.penalty_coeff != 0:
+            if not self.penalty_learned_var:  # MoRel
+                ensemble_means_obs = ensemble_model_means[:, :, 1:]
+                mean_obs_means = np.mean(ensemble_means_obs, axis=0)  # average predictions over models
+                diffs = ensemble_means_obs - mean_obs_means
+                normalize_diffs = False
+                if normalize_diffs:
+                    obs_dim = before_obs.shape[1]
+                    obs_sigma = self.model.scaler.cached_sigma[0, :obs_dim]
+                    diffs = diffs / obs_sigma
+                dists = np.linalg.norm(diffs, axis=2)  # distance in obs space
+                penalty = np.max(dists, axis=0)  # max distances over models
+            else:
+                penalty = np.amax(np.linalg.norm(ensemble_model_stds, axis=2), axis=0)
+
+            penalty = np.expand_dims(penalty, 1)
+            assert penalty.shape == rewards.shape, "rewards have shape {}, but penalty has shape {}".format(
+                rewards.shape, penalty.shape)
+            unpenalized_rewards = rewards
+            penalized_rewards = rewards - self.penalty_coeff * penalty
+        else:
+            penalty = None
+            unpenalized_rewards = rewards
+            penalized_rewards = rewards
+
         if return_single:
             before_obs = before_obs[0]
             return_means = return_means[0]
             return_stds = return_stds[0]
-            rewards = rewards[0]
+            unpenalized_rewards = unpenalized_rewards[0]
+            penalized_rewards = penalized_rewards[0]
             terminals = terminals[0]
 
-        info = {'mean': return_means, 'std': return_stds, 'log_prob': log_prob, 'dev': dev}
-        return before_obs, rewards, terminals, info
+        info = {'mean': return_means, 'std': return_stds, 'log_prob': log_prob, 'dev': dev,
+                'unpenalized_rewards': unpenalized_rewards, 'penalty': penalty, 'penalized_rewards': penalized_rewards}
+        return before_obs, penalized_rewards, terminals, info
+
 
     ## for debugging computation graph
     def step_ph(self, obs_ph, act_ph, deterministic=False):

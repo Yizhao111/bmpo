@@ -107,8 +107,12 @@ class BMOPO(RLAlgorithm):
         self._backward_model = construct_backward_model(obs_dim=obs_dim, act_dim=act_dim, hidden_dim=hidden_dim,
                                          num_networks=num_networks, num_elites=num_elites)
         self._static_fns = static_fns
-        self.f_fake_env = Forward_FakeEnv(self._forward_model, self._static_fns)
-        self.b_fake_env = Backward_FakeEnv(self._backward_model, self._static_fns)
+        self.f_fake_env = Forward_FakeEnv(self._forward_model, self._static_fns,
+                                          penalty_coeff=penalty_coeff,
+                                          penalty_learned_var=penalty_learned_var)
+        self.b_fake_env = Backward_FakeEnv(self._backward_model, self._static_fns,
+                                           penalty_coeff=penalty_coeff,
+                                           penalty_learned_var=penalty_learned_var)
 
         self._forward_rollout_schedule = forward_rollout_schedule
         self._backward_rollout_schedule = backward_rollout_schedule
