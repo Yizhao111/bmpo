@@ -291,15 +291,13 @@ class BMOPO(RLAlgorithm):
             evaluation_paths = self._evaluation_paths(
                 policy, evaluation_environment)
 
-            training_metrics = self._evaluate_rollouts(
-                training_paths, training_environment)
+            # training_metrics = self._evaluate_rollouts(
+            #     training_paths, training_environment)
             if evaluation_paths:
                 evaluation_metrics = self._evaluate_rollouts(
                     evaluation_paths, evaluation_environment)
             else:
                 evaluation_metrics = {}
-
-            self._epoch_after_hook(training_paths)
 
             sampler_diagnostics = self.sampler.get_diagnostics()
 
@@ -313,10 +311,6 @@ class BMOPO(RLAlgorithm):
                 *(
                     (f'evaluation/{key}', evaluation_metrics[key])
                     for key in sorted(evaluation_metrics.keys())
-                ),
-                *(
-                    (f'training/{key}', training_metrics[key])
-                    for key in sorted(training_metrics.keys())
                 ),
                 *(
                     (f'sampler/{key}', sampler_diagnostics[key])
@@ -343,11 +337,11 @@ class BMOPO(RLAlgorithm):
                     evaluation_environment, 'render_rollouts'):
                 training_environment.render_rollouts(evaluation_paths)
             print(diagnostics)
-            f_log = open(self.log_file, 'a')
-            f_log.write('epoch: %d\n' % self._epoch)
-            f_log.write('total time steps: %d\n' % self._total_timestep)
-            f_log.write('evaluation return: %f\n' % evaluation_metrics['return-average'])
-            f_log.close()
+            # f_log = open(self.log_file, 'a')
+            # f_log.write('epoch: %d\n' % self._epoch)
+            # f_log.write('total time steps: %d\n' % self._total_timestep)
+            # f_log.write('evaluation return: %f\n' % evaluation_metrics['return-average'])
+            # f_log.close()
 
         self.sampler.terminate()
 
@@ -780,6 +774,7 @@ class BMOPO(RLAlgorithm):
         for i in range(backward_policy_train_repeat):  #TODO: Change the backward_policy_train_repeat, Now forward train 1000 times while backward only train 1 time
             """ Our goal is to make the backward rollouts resemble the real trajectory sampled by the current forward policy.Thus
             when training the backward policy, we only use the recent trajectories sampled by the agent in the real environment."""
+            print('--------- train backward policy ----')
             batch = self._pool.last_n_random_batch(last_n=self._epoch_length * self._last_n_epoch, batch_size=256)  # TODO: This is incorrect, it uses the recent traj sampled from the real env.
             next_observations = np.array(batch['next_observations'])
             actions = np.array(batch['actions'])
