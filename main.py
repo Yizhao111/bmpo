@@ -8,27 +8,9 @@ args = parser.parse_args()
 
 module = importlib.import_module(args.config)
 params = getattr(module, 'params')  # get config dict params from --config=config.xx.py
+
 universe, domain, task = params['universe'], params['domain'], params['task']
 epoch_length = params['kwargs']['epoch_length']
-
-# NUM_EPOCHS_PER_DOMAIN = {
-#     'Pendulum':int(19),
-#     'Hopper': int(95),
-#     'HopperNT': int(95),
-#     'Walker2d': int(195),
-#     'Walker2dNT': int(195),
-#     'Ant': int(295),
-# }
-
-
-# params['kwargs']['n_epochs'] = NUM_EPOCHS_PER_DOMAIN[domain]  # TODO: mopo seems doesn't use the "n_epochs", check it
-
-params['kwargs']['reparameterize'] = True
-params['kwargs']['lr'] = 3e-4
-params['kwargs']['target_update_interval'] = 1
-params['kwargs']['tau'] = 5e-3
-params['kwargs']['store_extra_policy_info'] = False
-params['kwargs']['action_prior'] = 'uniform'
 
 variant_spec = {
         'environment_params': {
@@ -58,7 +40,9 @@ variant_spec = {
                 'hidden_layer_sizes': (256, 256),
             }
         },
+
         'algorithm_params': params,
+
         'replay_pool_params': {
             'type': 'SimpleReplayPool',
             'kwargs': {
@@ -74,14 +58,23 @@ variant_spec = {
             }
         },
         'run_params': {
-            # 'seed': args.seed,
+            # 'seed': args.seed,  # TODO: SEED?
             'checkpoint_at_end': True,
-            # 'checkpoint_frequency': NUM_EPOCHS_PER_DOMAIN[domain] // 10,  # TODO: in mopo , this is 20, check it latter
             'checkpoint_frequency': 20,
             'checkpoint_replay_pool': False,
         },
     }
 
-print(variant_spec)
-exp_runner = runner.ExperimentRunner(variant_spec)
-diagnostics = exp_runner.train()  # train agent and return diagnostics
+print('------------------ Experimental Parameters --------------')
+for k, v in variant_spec.items():
+    print(' ' * 5 + k + ': ')
+    for sub_k, sub_v in v.items():
+        if sub_k == 'kwargs':
+            print(' ' * 10 + sub_k + ': ')
+            for kwargs_k, kwargs_v in sub_v.items():
+                print(' '* 20 + kwargs_k + ': '+ str(kwargs_v))
+        else:
+            print(' '* 10 + sub_k + ': ' + str(sub_v))
+if __name__ == "__main__":
+    exp_runner = runner.ExperimentRunner(variant_spec)
+    diagnostics = exp_runner.train()  # train agent and return diagnostics

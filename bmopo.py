@@ -239,8 +239,8 @@ class BMOPO(RLAlgorithm):
 
         self._training_before_hook()
 
-        # max_epochs = 1 if (self._forward_model.model_loaded and self._backward_model.model_loaded) else None
-        max_epochs = 2 # TODO: CHAGE IT
+        max_epochs = 1 if (self._forward_model.model_loaded and self._backward_model.model_loaded) else None
+        # max_epochs = 2 # TODO: CHAGE IT
         # train the forward and the backward dynamic model
         f_model_train_metrics, b_model_train_metrics = self._train_model(batch_size=256,
                                                                         max_epochs=max_epochs,
@@ -427,41 +427,44 @@ class BMOPO(RLAlgorithm):
         print('Training forward model:')
         train_inputs, train_outputs = format_samples_for_forward_training(env_samples)
         f_model_metrics = self._forward_model.train(train_inputs, train_outputs, **kwargs)
-        print('Training backward model:')
-        train_inputs, train_outputs = format_samples_for_backward_training(env_samples)
-        b_model_metrics = self._backward_model.train(train_inputs, train_outputs, **kwargs)
+        # TODO 1
+        # print('Training backward model:')
+        # train_inputs, train_outputs = format_samples_for_backward_training(env_samples)
+        # b_model_metrics = self._backward_model.train(train_inputs, train_outputs, **kwargs)
+        b_model_metrics = {}
         return f_model_metrics, b_model_metrics
 
     def _rollout_model(self, rollout_batch_size, **kwargs):  # TODO: change the fake_env to add penalty
         # Rollout model using fake_env and add samples into _model_pool
 
-        print('[ Backward Model Rollout ] Starting | Epoch: {} | Rollout length: {} | Batch size: {}'.format(
-            self._epoch, self._backward_rollout_schedule[-1], rollout_batch_size,
-        ))
-
+        # print('[ Backward Model Rollout ] Starting | Epoch: {} | Rollout length: {} | Batch size: {}'.format(
+        #     self._epoch, self._backward_rollout_schedule[-1], rollout_batch_size,
+        # ))
+        #
         batch = self.sampler.random_batch(rollout_batch_size)  # sample init states batch from env_pool
         start_obs = batch['observations']
 
         f_steps_added, b_steps_added = [], []  # to record the num of collected samples
 
-        # perform backward rollout
-        obs = start_obs
-        for i in range(self._backward_rollout_length):
-            act = self._get_before_action(obs)
-
-            before_obs, rew, term, info = self.b_fake_env.step(obs, act, **kwargs)
-
-            samples = {'observations': before_obs, 'actions': act, 'next_observations': obs, 'rewards': rew,
-                       'terminals': term}
-            self._model_pool.add_samples(samples)  # _model_pool is to add samples get from unrolling the learned dynamic model
-            b_steps_added.append(len(obs))
-
-            nonterm_mask = ~term.squeeze(-1)
-            if nonterm_mask.sum() == 0:
-                print('[ Model Rollout ] Breaking early: {} | {} / {}'.format(i, nonterm_mask.sum(),
-                                                                              nonterm_mask.shape))
-                break
-            obs = before_obs[nonterm_mask]
+        # TODO: 2
+        # # perform backward rollout
+        # obs = start_obs
+        # for i in range(self._backward_rollout_length):
+        #     act = self._get_before_action(obs)
+        #
+        #     before_obs, rew, term, info = self.b_fake_env.step(obs, act, **kwargs)
+        #
+        #     samples = {'observations': before_obs, 'actions': act, 'next_observations': obs, 'rewards': rew,
+        #                'terminals': term}
+        #     self._model_pool.add_samples(samples)  # _model_pool is to add samples get from unrolling the learned dynamic model
+        #     b_steps_added.append(len(obs))
+        #
+        #     nonterm_mask = ~term.squeeze(-1)
+        #     if nonterm_mask.sum() == 0:
+        #         print('[ Model Rollout ] Breaking early: {} | {} / {}'.format(i, nonterm_mask.sum(),
+        #                                                                       nonterm_mask.shape))
+        #         break
+        #     obs = before_obs[nonterm_mask]
 
         # perform forward rollout
         print('[ Forward Model Rollout ] Starting | Epoch: {} | Rollout length: {} | Batch size: {} '.format(
@@ -754,35 +757,31 @@ class BMOPO(RLAlgorithm):
         """Repeat training _n_train_repeat times every _train_every_n_steps,
         This method overrides the method in softlearning, since it needs to take care of the backward policy
         """
-        print('-------------- into do training repeat -----------', "train_steps this epoch", self._train_steps_this_epoch, 'max * timestep', self._max_train_repeat_per_timestep*self._timestep, self._max_train_repeat_per_timestep, self._timestep)
         if timestep % self._train_every_n_steps > 0: return
         trained_enough = (
             self._train_steps_this_epoch
             > self._max_train_repeat_per_timestep * self._timestep)
-        print(' -------------- trained_enough ----------')
         if trained_enough: return
 
         # Train forward policy and Q
-        self._n_train_repeat = 1 # TODO : REMOVE THIS
-        for i in range(self._n_train_repeat):
-            print('------------ Train forward policy and Q function')
+        for i in range(self._n_train_repeat):  # the default self._n_train_repeat = 1
             self._do_training(
                 iteration=timestep,
                 batch=self._training_batch())
 
-        # train backward policy -- via maximal likelihood. s'->a
-        for i in range(backward_policy_train_repeat):  #TODO: Change the backward_policy_train_repeat, Now forward train 1000 times while backward only train 1 time
-            """ Our goal is to make the backward rollouts resemble the real trajectory sampled by the current forward policy.Thus
-            when training the backward policy, we only use the recent trajectories sampled by the agent in the real environment."""
-            print('--------- train backward policy ----')
-            batch = self._pool.last_n_random_batch(last_n=self._epoch_length * self._last_n_epoch, batch_size=256)  # TODO: This is incorrect, it uses the recent traj sampled from the real env.
-            next_observations = np.array(batch['next_observations'])
-            actions = np.array(batch['actions'])
-            feed_dict = {
-                self._actions_ph: actions,
-                self._next_observations_ph: next_observations,
-            }
-            self._session.run(self._backward_policy_optimizer, feed_dict)
+        # TODO: 3
+        # # train backward policy -- via maximal likelihood. s'->a
+        # for i in range(backward_policy_train_repeat):
+        #     """ Our goal is to make the backward rollouts resemble the real trajectory sampled by the current forward policy.Thus
+        #     when training the backward policy, we only use the recent trajectories sampled by the agent in the real environment."""
+        #     batch = self._pool.last_n_random_batch(last_n=self._epoch_length * self._last_n_epoch, batch_size=256)  # TODO: This is incorrect, it uses the recent traj sampled from the real env.
+        #     next_observations = np.array(batch['next_observations'])
+        #     actions = np.array(batch['actions'])
+        #     feed_dict = {
+        #         self._actions_ph: actions,
+        #         self._next_observations_ph: next_observations,
+        #     }
+        #     self._session.run(self._backward_policy_optimizer, feed_dict)
 
         self._num_train_steps += self._n_train_repeat
         self._train_steps_this_epoch += self._n_train_repeat
